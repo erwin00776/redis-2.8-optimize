@@ -234,8 +234,8 @@ sds createLatencyReport(void) {
 
     /* Return ASAP if the latency engine is disabled and it looks like it
      * was never enabled so far. */
-    if (dictSize(server.latency_events) == 0 &&
-        server.latency_monitor_threshold == 0)
+    if (server.latency_events==NULL ||
+            (dictSize(server.latency_events) == 0 && server.latency_monitor_threshold == 0))
     {
         report = sdscat(report,"I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. You may use \"CONFIG SET latency-monitor-threshold <milliseconds>.\" in order to enable it. If we weren't in a deep space mission I'd suggest to take a look at http://redis.io/topics/latency-monitor.\n");
         return report;
@@ -260,14 +260,25 @@ sds createLatencyReport(void) {
         }
         analyzeLatencyForEvent(event,&ls);
 
-        report = sdscatprintf(report,
-            "%d. %s: %d latency spikes (average %lums, mean deviation %lums, period %.2f sec). Worst all time event %lums.",
-            eventnum, event,
-            ls.samples,
-            (unsigned long) ls.avg,
-            (unsigned long) ls.mad,
-            (double) ls.period/ls.samples,
-            (unsigned long) ts->max);
+        if( ls.samples!=0 ) {
+            report = sdscatprintf(report,
+                    "%d. %s: %d latency spikes (average %lums, mean deviation %lums, period %.2f sec). Worst all time event %lums.",
+                    eventnum, event,
+                    ls.samples,
+                    (unsigned long) ls.avg,
+                    (unsigned long) ls.mad,
+                    (double) ls.period / ls.samples,
+                    (unsigned long) ts->max);
+        }else{
+            report = sdscatprintf(report,
+                    "%d. %s: %d latency spikes (average %lums, mean deviation %lums, period %.2f sec). Worst all time event %lums.",
+                    eventnum, event,
+                    0,
+                    (unsigned long) ls.avg,
+                    (unsigned long) ls.mad,
+                    (double) 0.0,
+                    (unsigned long) ts->max);
+        }
 
         /* Fork */
         if (!strcasecmp(event,"fork")) {

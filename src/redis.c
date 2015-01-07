@@ -1662,16 +1662,16 @@ void initServer(void) {
     server.current_client = NULL;
     server.clients = listCreate();
     server.clients_to_close = listCreate();
-    server.slaves = listCreate();
-    server.monitors = listCreate();
+    server.slaves = listCreate();           // @# slave的列表
+    server.monitors = listCreate();         // @#
     server.slaveseldb = -1; /* Force to emit the first SELECT command. */
     server.unblocked_clients = listCreate();
     server.ready_keys = listCreate();
 
-    createSharedObjects();
+    createSharedObjects();                  // @# 创建共享对象
     adjustOpenFilesLimit();
-    server.el = aeCreateEventLoop(server.maxclients+REDIS_EVENTLOOP_FDSET_INCR);
-    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+    server.el = aeCreateEventLoop(server.maxclients+REDIS_EVENTLOOP_FDSET_INCR);    // @# 主loop
+    server.db = zmalloc(sizeof(redisDb)*server.dbnum);          // @# 数据库，其实是表的定义
 
     /* Open the TCP listening socket for the user commands. */
     if (server.port != 0 &&
@@ -1711,8 +1711,9 @@ void initServer(void) {
     listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
     listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
     server.cronloops = 0;
-    server.rdb_child_pid = -1;
-    server.aof_child_pid = -1;
+
+    server.rdb_child_pid = -1;                // @# snapshot 线程的pid
+    server.aof_child_pid = -1;                // @# aof 线程的pid
     server.rdb_child_type = REDIS_RDB_CHILD_TYPE_NONE;
     aofRewriteBufferReset();
     server.aof_buf = sdsempty();
@@ -1774,7 +1775,7 @@ void initServer(void) {
     }
 
     replicationScriptCacheInit();
-    scriptingInit();
+    scriptingInit();        // @#  支持redis的脚本命令，使用lua
     slowlogInit();
     latencyMonitorInit();
     bioInit();
@@ -2164,9 +2165,11 @@ int processCommand(redisClient *c) {
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
     {
+        //redisLog(LOG_WARNING, "##DEBUG: using multi mode!");
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
+        //redisLog(LOG_WARNING, "##DEBUG: using single mode!");
         call(c,REDIS_CALL_FULL);
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
@@ -3357,7 +3360,7 @@ int main(int argc, char **argv) {
     redisSetProcTitle(argv[0]);
     redisAsciiArt();
 
-    if (!server.sentinel_mode) {
+    if (!server.sentinel_mode) {        // @# 哨兵模式？
         /* Things not needed when running in Sentinel mode. */
         redisLog(REDIS_WARNING,"Server started, Redis version " REDIS_VERSION);
     #ifdef __linux__

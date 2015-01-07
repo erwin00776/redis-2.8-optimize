@@ -659,6 +659,7 @@ int rdbSaveRio(rio *rdb, int *error) {
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
         /* Iterate this DB writing every entry */
+        unsigned kv_cnt = 0;
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
@@ -666,8 +667,11 @@ int rdbSaveRio(rio *rdb, int *error) {
 
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
+            kv_cnt += 1;
             if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
         }
+
+        redisLog(LOG_WARNING, "rdbfile / slave send db-%d count %d", j, kv_cnt);
         dictReleaseIterator(di);
     }
     di = NULL; /* So that we don't release it again on error. */
@@ -704,7 +708,7 @@ int rdbSaveRioWithEOFMark(rio *rdb, int *error) {
     if (rioWrite(rdb,"$EOF:",5) == 0) goto werr;
     if (rioWrite(rdb,eofmark,REDIS_EOF_MARK_SIZE) == 0) goto werr;
     if (rioWrite(rdb,"\r\n",2) == 0) goto werr;
-    if (rdbSaveRio(rdb,error) == REDIS_ERR) goto werr;
+    if (rdbSaveRio(rdb,error) == REDIS_ERR) goto werr;     // ## 这里才是真正copy数据的
     if (rioWrite(rdb,eofmark,REDIS_EOF_MARK_SIZE) == 0) goto werr;
     return REDIS_OK;
 
@@ -747,6 +751,8 @@ int rdbSave(char *filename) {
         unlink(tmpfile);
         return REDIS_ERR;
     }
+    // redisLog(REDIS_NOTICE,"sleep a while.");
+    // sleep(15);
     redisLog(REDIS_NOTICE,"DB saved on disk");
     server.dirty = 0;
     server.lastsave = time(NULL);
