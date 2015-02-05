@@ -30,6 +30,8 @@
 #include "redis.h"
 #include <math.h>
 
+#define DISABLE_HASH_KEY_COMPACT
+
 /*-----------------------------------------------------------------------------
  * Hash type API
  *----------------------------------------------------------------------------*/
@@ -472,6 +474,10 @@ void hashTypeConvert(robj *o, int enc) {
 
 // TODO
 robj* hashKeyS2I(redisClient *c, robj *str){
+#ifdef DISABLE_HASH_KEY_COMPACT
+    str->refcount += 1;
+    return str;
+#endif
     if( str==NULL || str->ptr==NULL ){
         return NULL;
     }
@@ -507,6 +513,10 @@ robj* hashKeyS2I(redisClient *c, robj *str){
 }
 
 robj* hashKeyI2S(redisClient *c, robj *index){
+#ifdef DISABLE_HASH_KEY_COMPACT
+    index->refcount += 1;
+    return index;
+#endif
     if( index==NULL ){
         return NULL;
     }
@@ -548,7 +558,6 @@ void hsetCommand(redisClient *c) {
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_HASH,"hset",c->argv[1],c->db->id);
     server.dirty++;
-
     decrRefCount(index);
 }
 
@@ -582,7 +591,10 @@ void hmsetCommand(redisClient *c) {
     hashTypeTryConversion(o,c->argv,2,c->argc-1);
     for (i = 2; i < c->argc; i += 2) {
         hashTypeTryObjectEncoding(o,&c->argv[i], &c->argv[i+1]);
-        hashTypeSet(o,c->argv[i],c->argv[i+1]);
+        robj *index = hashKeyS2I(c, c->argv[i]);
+        //hashTypeSet(o,c->argv[i],c->argv[i+1]);
+        hashTypeSet(o, index, c->argv[i+1]);
+        decrRefCount(index);
     }
     addReply(c, shared.ok);
     signalModifiedKey(c->db,c->argv[1]);
