@@ -1,3 +1,14 @@
+What is difference?
+-------------------(Feb 05, hi, this a toy.)
+1) Optimize for field compaction of t_hash 
+2) Add more statisics for everything?? 
+3) Hi?
+
+
+############################################################################$
+                      !!! BELOW: Orignal Redis Readme !!!
+############################################################################$
+
 Where to find complete Redis documentation?
 -------------------------------------------
 
