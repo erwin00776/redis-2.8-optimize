@@ -197,6 +197,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
 #define REDIS_ENCODING_INTSET 6  /* Encoded as intset */
 #define REDIS_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+#define REDIS_ENCODING_FREQUENCY 8  /* Encoded as frequency item */
 
 /* Defines related to the dump file format. To store 32 bits lengths for short
  * keys requires a lot of space, so we check the most significant 2 bits of
@@ -918,6 +919,7 @@ typedef struct {
 
 #define REDIS_HASH_KEY 1
 #define REDIS_HASH_VALUE 2
+#define REDIS_HASH_META 4
 
 /*-----------------------------------------------------------------------------
  * Extern declarations

@@ -10,7 +10,8 @@
  *
  * ZIPLIST OVERALL LAYOUT:
  * The general layout of the ziplist is as follows:
- * <zlbytes><zltail><zllen><entry><entry><zlend>
+ * //<zlbytes><zltail><zllen><entry><entry><zlend>
+ * <zlbytes><zltail><zllen>[<entry>...<entry>]<zlend>
  *
  * <zlbytes> is an unsigned integer to hold the number of bytes that the
  * ziplist occupies. This value needs to be stored to be able to resize the

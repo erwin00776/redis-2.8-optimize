@@ -170,10 +170,20 @@ int hashTypeExists(robj *o, robj *field) {
 int hashTypeSet(robj *o, robj *field, robj *value) {
     int update = 0;
 
+    // TODO
+    /*
+    if (field != NULL && field->ptr != NULL) {
+        redisLog(LOG_INFO, "hash set key %d, %d, %s.",
+                field->type, field->encoding, field->ptr);
+    }else{
+        redisLog(LOG_INFO, "hset a null pointer?!");
+    }
+    */
+
     if (o->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *zl, *fptr, *vptr;
 
-        field = getDecodedObject(field);
+        field = getDecodedObject(field);    // this will convert to string.
         value = getDecodedObject(value);
 
         zl = o->ptr;
@@ -460,6 +470,66 @@ void hashTypeConvert(robj *o, int enc) {
     }
 }
 
+// TODO
+robj* hashKeyS2I(redisClient *c, robj *str){
+    if( str==NULL || str->ptr==NULL ){
+        return NULL;
+    }
+
+    robj *index = NULL;
+    robj *o, *o2;
+    sds keyname = sdsnew("__hash_key_compact_s2i__");
+    sds keyname2 = sdsnew("__hash_key_compact_i2s__");
+    robj *compact_key = createObject(REDIS_STRING, keyname);
+    robj *compact_key2 = createObject(REDIS_STRING, keyname2);
+    o2 = hashTypeLookupWriteOrCreate(c, compact_key2);
+    if( (o= hashTypeLookupWriteOrCreate(c, compact_key))!=NULL ) {
+        unsigned long len = hashTypeLength(o);
+        index = hashTypeGetObject(o, str);
+        if( index==NULL ) {
+            index = createObject(REDIS_STRING, (void*)(long)len);
+            index->encoding = REDIS_ENCODING_INT;
+            hashTypeSet(o, str, index);
+            hashTypeSet(o2, index, str);
+        }
+    }
+    sdsfree(keyname);
+    sdsfree(keyname2);
+    zfree(compact_key);
+    zfree(compact_key2);
+    if( str!=NULL && str->ptr!=NULL && index!=NULL && index->ptr!=NULL ) {
+        redisLog(LOG_DEBUG, "str2int %s -> %u", (char *)str->ptr, (unsigned)index->ptr);
+    } else if( str!=NULL && str->ptr!=NULL ) {
+        redisLog(LOG_DEBUG, "str2int error %s", (char *)str->ptr);
+    }
+
+    return index;
+}
+
+robj* hashKeyI2S(redisClient *c, robj *index){
+    if( index==NULL ){
+        return NULL;
+    }
+
+    robj *str = NULL;
+    robj *o;
+    sds keyname = sdsnew("__hash_key_compact_i2s__");
+    robj *compact_key = createObject(REDIS_STRING, keyname);
+    if( (o= hashTypeLookupWriteOrCreate(c, compact_key))!=NULL ) {
+        str = hashTypeGetObject(o, index);
+    }
+    sdsfree(keyname);
+    zfree(compact_key);
+
+    if( str!=NULL && str->ptr!=NULL && index!=NULL && index->ptr!=NULL ) {
+        redisLog(LOG_DEBUG, "int2str %u -> %s", (unsigned)index->ptr, (char *) str->ptr);
+    }else{
+        redisLog(LOG_DEBUG, "int2str error: %d", (unsigned)index->ptr);
+    }
+
+    return str;
+}
+
 /*-----------------------------------------------------------------------------
  * Hash type commands
  *----------------------------------------------------------------------------*/
@@ -470,12 +540,16 @@ void hsetCommand(redisClient *c) {
 
     if ((o = hashTypeLookupWriteOrCreate(c,c->argv[1])) == NULL) return;
     hashTypeTryConversion(o,c->argv,2,3);
+    redisLog(LOG_INFO, "hset type=%d", o->encoding);
+    robj *index = hashKeyS2I(c, c->argv[2]);
     hashTypeTryObjectEncoding(o,&c->argv[2], &c->argv[3]);
-    update = hashTypeSet(o,c->argv[2],c->argv[3]);
+    update = hashTypeSet(o,index,c->argv[3]);
     addReply(c, update ? shared.czero : shared.cone);
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_HASH,"hset",c->argv[1],c->db->id);
     server.dirty++;
+
+    decrRefCount(index);
 }
 
 void hsetnxCommand(redisClient *c) {
@@ -594,12 +668,14 @@ static void addHashFieldToReply(redisClient *c, robj *o, robj *field) {
         return;
     }
 
+    robj *index = hashKeyS2I(c, field);
     if (o->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *vstr = NULL;
         unsigned int vlen = UINT_MAX;
         long long vll = LLONG_MAX;
 
-        ret = hashTypeGetFromZiplist(o, field, &vstr, &vlen, &vll);
+        // ret = hashTypeGetFromZiplist(o, field, &vstr, &vlen, &vll);
+        ret = hashTypeGetFromZiplist(o, index, &vstr, &vlen, &vll);
         if (ret < 0) {
             addReply(c, shared.nullbulk);
         } else {
@@ -613,7 +689,8 @@ static void addHashFieldToReply(redisClient *c, robj *o, robj *field) {
     } else if (o->encoding == REDIS_ENCODING_HT) {
         robj *value;
 
-        ret = hashTypeGetFromHashTable(o, field, &value);
+        //ret = hashTypeGetFromHashTable(o, field, &value);
+        ret = hashTypeGetFromHashTable(o, index, &value);
         if (ret < 0) {
             addReply(c, shared.nullbulk);
         } else {
@@ -623,6 +700,8 @@ static void addHashFieldToReply(redisClient *c, robj *o, robj *field) {
     } else {
         redisPanic("Unknown hash encoding");
     }
+
+    decrRefCount(index);
 }
 
 void hgetCommand(redisClient *c) {
@@ -694,10 +773,24 @@ static void addHashIteratorCursorToReply(redisClient *c, hashTypeIterator *hi, i
         unsigned int vlen = UINT_MAX;
         long long vll = LLONG_MAX;
 
+        // TODO
+        robj *index = NULL;
         hashTypeCurrentFromZiplist(hi, what, &vstr, &vlen, &vll);
         if (vstr) {
-            addReplyBulkCBuffer(c, vstr, vlen);
+            index = createStringObject((char *)vstr, vlen);
+            // addReplyBulkCBuffer(c, vstr, vlen);
         } else {
+            index = createStringObjectFromLongLong(vll);
+            // addReplyBulkLongLong(c, vll);
+        }
+
+        if (what == REDIS_HASH_KEY && ((what & REDIS_HASH_META)==0) ){
+            robj *str = hashKeyI2S(c, index);
+            addReplyBulkCBuffer(c, str->ptr, strlen(str->ptr));
+            decrRefCount(index);
+        }else if( vstr ){
+            addReplyBulkCBuffer(c, vstr, vlen);
+        }else{
             addReplyBulkLongLong(c, vll);
         }
 
@@ -705,6 +798,10 @@ static void addHashIteratorCursorToReply(redisClient *c, hashTypeIterator *hi, i
         robj *value;
 
         hashTypeCurrentFromHashTable(hi, what, &value);
+        if( what == REDIS_HASH_KEY && ((what & REDIS_HASH_META)==0) ) {
+            robj *str = hashKeyI2S(c, value);
+            value = str;
+        }
         addReplyBulk(c, value);
 
     } else {
@@ -717,6 +814,13 @@ void genericHgetallCommand(redisClient *c, int flags) {
     hashTypeIterator *hi;
     int multiplier = 0;
     int length, count = 0;
+    int meta = 0;
+
+    if ( c->argv[1]->encoding == REDIS_ENCODING_RAW &&
+            (strcmp("__hash_key_compact_i2s__", (char*)c->argv[1]->ptr)==0 ||
+                    strcmp("__hash_key_compact_s2i__", (char*)c->argv[1]->ptr)==0 )) {
+        meta |= REDIS_HASH_META;
+    }
 
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptymultibulk)) == NULL
         || checkType(c,o,REDIS_HASH)) return;
@@ -730,11 +834,11 @@ void genericHgetallCommand(redisClient *c, int flags) {
     hi = hashTypeInitIterator(o);
     while (hashTypeNext(hi) != REDIS_ERR) {
         if (flags & REDIS_HASH_KEY) {
-            addHashIteratorCursorToReply(c, hi, REDIS_HASH_KEY);
+            addHashIteratorCursorToReply(c, hi, REDIS_HASH_KEY | meta);
             count++;
         }
         if (flags & REDIS_HASH_VALUE) {
-            addHashIteratorCursorToReply(c, hi, REDIS_HASH_VALUE);
+            addHashIteratorCursorToReply(c, hi, REDIS_HASH_VALUE | meta);
             count++;
         }
     }

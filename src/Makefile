@@ -21,6 +21,7 @@ DEPENDENCY_TARGETS=hiredis linenoise lua
 STD=-std=c99 -pedantic
 WARN=-Wall -W
 OPT=$(OPTIMIZATION)
+OPT=-ggdb -pg
 
 PREFIX?=/usr/local
 INSTALL_BIN=$(PREFIX)/bin

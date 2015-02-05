@@ -303,6 +303,13 @@ void pushGenericCommand(redisClient *c, int where) {
 
     for (j = 2; j < c->argc; j++) {
         c->argv[j] = tryObjectEncoding(c->argv[j]);
+        /*
+        if( c->argv[j]->encoding == REDIS_ENCODING_RAW ) {
+            redisLog(LOG_INFO, "list push %s encoding %d", (char *)(c->argv[j]->ptr), c->argv[j]->encoding);
+        }else if( c->argv[j]->encoding == REDIS_ENCODING_INT ) {
+            redisLog(LOG_INFO, "list push %ld encoding %d", c->argv[j]->ptr, c->argv[j]->encoding);
+        }
+        */
         if (!lobj) {
             lobj = createZiplistObject();
             dbAdd(c->db,c->argv[1],lobj);
